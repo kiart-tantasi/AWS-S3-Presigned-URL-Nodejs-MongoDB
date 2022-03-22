@@ -1,10 +1,27 @@
+// 9 Things to set in .env file
+// ACCESS_KEY_ID= find it in your AWS account
+// SECRET_ACCESS_KEY= find it in your AWS account
+// BUCKET_URL= for example: https://mybucket.s3.ap-southeast-1.amazonaws.com
+// BUCKET_NAME= for example: items
+// DB_URL= for example: mongodb://localhost:27017
+// DB_NAME= for example: presignedUrlDB
+// DB_COLLECTION= for example: presignedUrlCollection
+// AWS_REGION= for example: ap-southeast-1
+// TEST_OBJECT_URL= for example: https://mybucket.s3.ap-southeast-1.amazonaws.com/items/image.png
+
 require("dotenv").config();
 const { MongoClient } = require("mongodb");
 const AWS = require("aws-sdk");
 
 const transformImgUrl = async (objectUrl) => {
-    // เช็คว่าใช่ object url ของเราหรือไม่
-    if (!objectUrl.includes("Your aws bucket url. For example: https://mybucket.s3.ap-southeast-1.amazonaws.com")) return console.log("incorrect object url");
+    const bucketUrl = process.env.BUCKET_URL; // for example: https://mybucket.s3.ap-southeast-1.amazonaws.com
+
+    // เช็คว่าใช่ object url ของเราหรือไม่ ถ้าไม่ใช่ก็ return url อันเดิมกลับไปเลย
+    if (!objectUrl.includes(bucketUrl)) {
+        console.log("incorrect object url");
+        return objectUrl;
+    }
+
     const client = new MongoClient(process.env.DB_URL);
     try {
         // เชื่อมต่อ db และ collection (mongodb)
@@ -12,9 +29,9 @@ const transformImgUrl = async (objectUrl) => {
         const db = client.db(process.env.DB_NAME);
         const presignedUrlCollection = db.collection(process.env.DB_COLLECTION);
 
-        const key = objectUrl.slice(60); // slice object key ออกจาก object url
+        const key = objectUrl.slice(bucketUrl.length + 1); // สไลซ์ Object Key ออกจาก object url
         const result = await presignedUrlCollection.findOne({ key: key }); // หาว่ามีลิงก์ที่สร้างไว้แล้วหรือไม่
-        const deadline = (result) ? result.age - (5 * 60 * 1000) : null; // อายุของลิงก์ - 5 นาที (หากมีลิงก์ที่สร้างไว้แล้ว)
+        const deadline = (result) ? result.age - (5 * 60 * 1000) : null; // deadline = เวลาหมดอายุ - 5 นาที (หากมีลิงก์ที่สร้างไว้แล้ว)
         const now = new Date().getTime(); // เวลาปัจจุบัน
 
         // 1 ถ้าลิงก์ยังไม่หมดอายุ ใช้อันเดิมต่อได้ - return กลับได้เลย
@@ -42,21 +59,21 @@ const transformImgUrl = async (objectUrl) => {
         // 1.1 ถ้าสร้างลิงก์ครั้งแรกก็ใช้ insertOne
         if (!result) await presignedUrlCollection.insertOne(newPresignedUrlData);
         // 1.2 ถ้าเคยมีแล้ว (แต่หมดอายุ) ก็ใช้คำสั่ง replaceOne เข้าไปแทนอันเก่า
-        else if (deadline && deadline <= now) await presignedUrlCollection.replaceOne({ key: key }, newPresignedUrlData);
+        else if (result && deadline && deadline <= now) await presignedUrlCollection.replaceOne({ key: key }, newPresignedUrlData);
         // 1.3! ไม่ตรงซักเงื่อนไข throw เป็น Error ไปให้ try-catch
         else throw new Error("Something went wrong.");
         
         return newPresignedUrl; // return ลิงก์ presigned url อันใหม่
     } catch (error) {
+        client.close();
         console.log(error.message);
-        return objectUrl; // ถ้า error ก็ return เป็นลิงก์เดิมไปแทน
+        return objectUrl; // ถ้า error ก็ return url อันเดิมไปแทน
     }
 }
 
 // ทดสอบ
 const test = async() => {
-    client.close();
-    const result = await transformImgUrl("object url you want to create presigned url");
+    const result = await transformImgUrl(process.env.TEST_OBJECT_URL); // for example: https://mybucket.s3.ap-southeast-1.amazonaws.com/items/image.png
     console.log(result);
 }
 test();
