@@ -41,11 +41,13 @@ const transformImgUrl = async (objectUrl) => {
         AWS.config.update({ // สร้างลิงก์ presigned url ใหม่ด้วย AWS SDK
             accessKeyId: process.env.ACCESS_KEY_ID, // AWS Access Key ID
             secretAccessKey: process.env.SECRET_ACCESS_KEY, // AWS Secret Access Key
-            region: process.env.AWS_REGION  // AWS Region
+            region: process.env.AWS_REGION,  // AWS Region
+            signatureVersion: "v4"
         });
         const s3 = new AWS.S3();
         const seconds = 60 * 60;
-        let newPresignedUrl = s3.getSignedUrl('getObject', {
+        console.log("creating new presigned url...");
+        const newPresignedUrl = s3.getSignedUrl('getObject', {
             Bucket: process.env.BUCKET_NAME, // ชื่อ bucket
             Key: key,
             Expires: seconds // อายุลิงก์ (วินาที)
